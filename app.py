@@ -719,4 +719,8 @@ def _generate_hourly_trend():
 
 if __name__ == "__main__":
     logger.info("Starting PhishGuard AI server on http://127.0.0.1:5000")
-    app.run(debug=False, host="127.0.0.1", port=5000)
+    import os
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
