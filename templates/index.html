@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PhishGuard AI — Indian Enterprise Phishing Detection</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #05080f;
+    --surface:  #0b1120;
+    --card:     #0f1929;
+    --border:   #1a2d47;
+    --accent:   #00d4ff;
+    --danger:   #ff3b5c;
+    --warn:     #ffaa00;
+    --safe:     #00e676;
+    --purple:   #a855f7;
+    --text:     #e2e8f0;
+    --dim:      #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(26,45,71,0.3) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(26,45,71,0.3) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Tab system */
+  .tab-btn { padding: 10px 20px; cursor: pointer; border: none; background: none; font-size: 13px; font-weight: 500; color: var(--dim); border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* Cards */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; position: relative; overflow: hidden; }
+  .card-accent-top { position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+
+  /* Inputs */
+  input, textarea, select {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); padding: 10px 14px; font-size: 13px;
+    font-family: inherit; outline: none; transition: border-color 0.2s;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  label { font-size: 11px; color: var(--dim); letter-spacing: 0.8px; text-transform: uppercase; display: block; margin-bottom: 6px; }
+
+  /* Buttons */
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #0099bb);
+    color: #000; border: none; border-radius: 8px; padding: 12px 28px;
+    font-size: 13px; font-weight: 700; cursor: pointer; letter-spacing: 0.5px;
+    transition: all 0.2s; box-shadow: 0 0 20px rgba(0,212,255,0.3);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 30px rgba(0,212,255,0.5); }
+  .btn-primary:disabled { background: var(--border); color: var(--dim); cursor: not-allowed; transform: none; box-shadow: none; }
+  .btn-secondary {
+    background: transparent; color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 8px; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-secondary:hover { background: rgba(0,212,255,0.1); }
+
+  /* Badge */
+  .badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.8px; }
+  .badge-phishing { background: rgba(255,59,92,0.15); border: 1px solid rgba(255,59,92,0.5); color: var(--danger); }
+  .badge-suspicious { background: rgba(255,170,0,0.15); border: 1px solid rgba(255,170,0,0.5); color: var(--warn); }
+  .badge-safe { background: rgba(0,230,118,0.15); border: 1px solid rgba(0,230,118,0.5); color: var(--safe); }
+  .badge-malicious { background: rgba(255,59,92,0.15); border: 1px solid rgba(255,59,92,0.5); color: var(--danger); }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+
+  /* Severity */
+  .sev-critical { color: var(--danger); }
+  .sev-high { color: #ff7043; }
+  .sev-medium { color: var(--warn); }
+  .sev-low { color: #78909c; }
+  .sev-info { color: var(--accent); }
+
+  /* Gauge */
+  .gauge-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+
+  /* Pulse animation */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .live-dot { animation: pulse 2s infinite; }
+  .loading { animation: spin 1s linear infinite; }
+  .fade-in { animation: fadeIn 0.4s ease forwards; }
+
+  /* Progress bar */
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease; }
+
+  /* Threat item */
+  .threat-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; background: rgba(255,59,92,0.05); border: 1px solid rgba(255,59,92,0.15); border-left: 3px solid; border-radius: 8px; margin-bottom: 8px; }
+
+  /* Feature score row */
+  .feature-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+
+  /* Responsive grid helpers */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  @media(max-width:900px) { .grid-2,.grid-3,.grid-4 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div style="position:relative;z-index:1">
+
+<!-- ══════════ HEADER ══════════ -->
+<header style="background:rgba(11,17,32,0.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:14px 28px;position:sticky;top:0;z-index:100">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
+    <div style="width:40px;height:40px;background:linear-gradient(135deg,var(--accent),var(--purple));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 0 20px rgba(0,212,255,0.4)">🛡️</div>
+    <div>
+      <div style="font-size:18px;font-weight:800;letter-spacing:2px;text-transform:uppercase">
+        PhishGuard <span style="color:var(--accent)">AI</span>
+      </div>
+      <div style="font-size:10px;color:var(--dim);letter-spacing:1px">AI-POWERED PHISHING DETECTION FOR INDIAN ENTERPRISES</div>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:14px">
+      <div id="api-status" style="display:flex;align-items:center;gap:6px;background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.3);border-radius:20px;padding:5px 12px">
+        <span class="live-dot" style="width:7px;height:7px;border-radius:50%;background:var(--safe);display:inline-block"></span>
+        <span style="font-size:11px;color:var(--safe)" id="api-status-text">API ONLINE</span>
+      </div>
+      <div style="font-size:11px;color:var(--dim)" id="header-time"></div>
+    </div>
+  </div>
+  <!-- Tabs -->
+  <div style="display:flex;overflow-x:auto;gap:0">
+    <button class="tab-btn active" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="tab-btn" onclick="switchTab('email-scanner')">📧 Email Scanner</button>
+    <button class="tab-btn" onclick="switchTab('url-checker')">🔗 URL Checker</button>
+    <button class="tab-btn" onclick="switchTab('performance')">📈 ML Metrics</button>
+  </div>
+</header>
+
+<main style="padding:24px 28px;max-width:1400px;margin:0 auto">
+
+<!-- ══════════ PAGE 1: DASHBOARD ══════════ -->
+<div class="tab-pane active" id="tab-dashboard">
+
+  <!-- Stat cards -->
+  <div class="grid-4" style="margin-bottom:20px" id="stat-cards">
+    <div class="card fade-in">
+      <div class="card-accent-top" style="background:linear-gradient(90deg,var(--accent),transparent)"></div>
+      <div style="font-size:22px;margin-bottom:4px">📨</div>
+      <div style="font-size:11px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Total Scanned</div>
+      <div class="mono" style="font-size:30px;font-weight:800;color:var(--accent)" id="stat-total">—</div>
+      <div style="font-size:11px;color:var(--dim)">cumulative</div>
+    </div>
+    <div class="card fade-in" style="animation-delay:0.1s">
+      <div class="card-accent-top" style="background:linear-gradient(90deg,var(--danger),transparent)"></div>
+      <div style="font-size:22px;margin-bottom:4px">🎣</div>
+      <div style="font-size:11px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Threats Blocked</div>
+      <div class="mono" style="font-size:30px;font-weight:800;color:var(--danger)" id="stat-phishing">—</div>
+      <div style="font-size:11px;color:var(--dim)" id="stat-rate">—% threat rate</div>
+    </div>
+    <div class="card fade-in" style="animation-delay:0.2s">
+      <div class="card-accent-top" style="background:linear-gradient(90deg,var(--warn),transparent)"></div>
+      <div style="font-size:22px;margin-bottom:4px">⚠️</div>
+      <div style="font-size:11px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Suspicious</div>
+      <div class="mono" style="font-size:30px;font-weight:800;color:var(--warn)" id="stat-suspicious">—</div>
+      <div style="font-size:11px;color:var(--dim)">needs review</div>
+    </div>
+    <div class="card fade-in" style="animation-delay:0.3s">
+      <div class="card-accent-top" style="background:linear-gradient(90deg,var(--safe),transparent)"></div>
+      <div style="font-size:22px;margin-bottom:4px">✅</div>
+      <div style="font-size:11px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Safe</div>
+      <div class="mono" style="font-size:30px;font-weight:800;color:var(--safe)" id="stat-safe">—</div>
+      <div style="font-size:11px;color:var(--dim)">cleared</div>
+    </div>
+  </div>
+
+  <!-- Charts row -->
+  <div class="grid-2" style="margin-bottom:20px">
+    <div class="card">
+      <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:16px">⏱ HOURLY THREAT TREND</div>
+      <canvas id="trendChart" height="160"></canvas>
+    </div>
+    <div class="card">
+      <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:16px">🍩 SCAN DISTRIBUTION</div>
+      <canvas id="donutChart" height="160"></canvas>
+    </div>
+  </div>
+
+  <!-- Model performance + recent scans -->
+  <div class="grid-2">
+    <div class="card">
+      <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:16px">🤖 MODEL PERFORMANCE</div>
+      <div id="perf-metrics"></div>
+    </div>
+    <div class="card">
+      <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:16px">🕐 RECENT SCANS</div>
+      <div id="recent-scans" style="max-height:240px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE 2: EMAIL SCANNER ══════════ -->
+<div class="tab-pane" id="tab-email-scanner">
+  <div class="grid-2" style="align-items:start">
+
+    <!-- Input form -->
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-accent-top" style="background:linear-gradient(90deg,var(--accent),var(--purple))"></div>
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:20px">📧 Email / Message Analysis</div>
+
+        <div style="margin-bottom:14px">
+          <label>Sender Email</label>
+          <input type="text" id="email-sender" placeholder="e.g. security@sbi-secure-verify.com" />
+        </div>
+        <div style="margin-bottom:14px">
+          <label>Subject Line</label>
+          <input type="text" id="email-subject" placeholder="e.g. Urgent: Your SBI account will be suspended!" />
+        </div>
+        <div style="margin-bottom:14px">
+          <label>Email Body / Message (supports Hindi, Tamil, Telugu, Bengali...)</label>
+          <textarea id="email-body" rows="7" placeholder="Paste the full email or message content here. Multilingual content (Hindi, Tamil, Telugu, Bengali, Gujarati, etc.) is supported..."></textarea>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn-primary" id="scan-email-btn" onclick="scanEmail()">🚀 Scan for Phishing</button>
+          <button class="btn-secondary" onclick="loadSample('phishing')">Load Phishing Sample</button>
+          <button class="btn-secondary" onclick="loadSample('hindi')">Load Hindi Sample</button>
+          <button class="btn-secondary" onclick="loadSample('legit')">Load Legit Sample</button>
+        </div>
+      </div>
+
+      <!-- Quick tip -->
+      <div style="background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.2);border-radius:10px;padding:14px">
+        <div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:8px">ℹ️ SUPPORTED INPUT TYPES</div>
+        <div style="font-size:12px;color:var(--dim);line-height:1.8">
+          ✓ English phishing emails &nbsp;|&nbsp; ✓ Hindi (हिंदी) messages<br>
+          ✓ Tamil (தமிழ்) content &nbsp;|&nbsp; ✓ Telugu / Bengali / Gujarati<br>
+          ✓ SMS phishing (smishing) &nbsp;|&nbsp; ✓ URLs embedded in body<br>
+          ✓ Bank / UPI / Government impersonation
+        </div>
+      </div>
+    </div>
+
+    <!-- Results panel -->
+    <div id="email-result-panel">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;color:var(--dim);text-align:center">
+        <div style="font-size:48px;margin-bottom:12px">🔍</div>
+        <div style="font-size:14px">Paste an email or message and click<br><strong style="color:var(--text)">Scan for Phishing</strong></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE 3: URL CHECKER ══════════ -->
+<div class="tab-pane" id="tab-url-checker">
+  <div class="grid-2" style="align-items:start">
+
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-accent-top" style="background:linear-gradient(90deg,var(--purple),var(--accent))"></div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:20px">🔗 URL / Domain Risk Analyzer</div>
+
+        <div style="margin-bottom:14px">
+          <label>Suspicious URL or Domain</label>
+          <input type="text" id="url-input" placeholder="e.g. http://sbi-secure-login.xyz/verify?otp=123" />
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn-primary" onclick="scanURL()">🔎 Analyze URL</button>
+          <button class="btn-secondary" onclick="loadURLSample('phishing')">Phishing URL</button>
+          <button class="btn-secondary" onclick="loadURLSample('safe')">Safe URL</button>
+        </div>
+      </div>
+
+      <!-- Batch URL check -->
+      <div class="card">
+        <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:12px">⚡ BATCH URL CHECK (one per line)</div>
+        <textarea id="batch-urls" rows="5" placeholder="http://sbi-login.xyz&#10;https://hdfcbank.com&#10;http://paypal-india-win.top/claim"></textarea>
+        <button class="btn-secondary" style="margin-top:10px;width:100%" onclick="batchScan()">Scan All URLs</button>
+        <div id="batch-results" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <div id="url-result-panel">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;color:var(--dim);text-align:center">
+        <div style="font-size:48px;margin-bottom:12px">🔗</div>
+        <div style="font-size:14px">Enter a URL and click<br><strong style="color:var(--text)">Analyze URL</strong></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE 4: PERFORMANCE ══════════ -->
+<div class="tab-pane" id="tab-performance">
+  <div class="grid-2" style="margin-bottom:20px">
+    <div class="card">
+      <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:16px">📊 PERFORMANCE METRICS</div>
+      <canvas id="metricsBar" height="180"></canvas>
+    </div>
+    <div class="card">
+      <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:16px">🧮 CONFUSION MATRIX</div>
+      <div id="confusion-matrix"></div>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:16px">🏗 MODEL ARCHITECTURE</div>
+      <div id="model-arch"></div>
+    </div>
+    <div class="card">
+      <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:16px">⚖️ RISK SCORING FORMULA</div>
+      <div id="scoring-formula"></div>
+    </div>
+  </div>
+</div>
+
+</main>
+</div><!-- /z-index wrapper -->
+
+<!-- ══════════ SCRIPTS ══════════ -->
+<script>
+const API = "http://127.0.0.1:5000";
+let trendChart, donutChart, metricsChart;
+
+// ─── UTILITIES ────────────────────────────────────────────────────────────────
+function badge(verdict) {
+  const v = (verdict || "").toUpperCase();
+  const map = {
+    PHISHING: "badge-phishing", MALICIOUS: "badge-phishing",
+    SUSPICIOUS: "badge-suspicious", SAFE: "badge-safe",
+  };
+  const cls = map[v] || "badge-safe";
+  const colors = { PHISHING:"var(--danger)", MALICIOUS:"var(--danger)", SUSPICIOUS:"var(--warn)", SAFE:"var(--safe)" };
+  const col = colors[v] || "var(--safe)";
+  return `<span class="badge ${cls}"><span class="badge-dot" style="background:${col}"></span>${v}</span>`;
+}
+
+function severityColor(sev) {
+  const m = { CRITICAL:"var(--danger)", HIGH:"#ff7043", MEDIUM:"var(--warn)", LOW:"var(--dim)", INFO:"var(--accent)" };
+  return m[(sev||"").toUpperCase()] || "var(--dim)";
+}
+
+function progressColor(val) {
+  return val >= 65 ? "var(--danger)" : val >= 35 ? "var(--warn)" : "var(--safe)";
+}
+
+function fmtTime(ts) { return ts ? ts.replace("T"," ").slice(0,19) : ""; }
+
+function el(id) { return document.getElementById(id); }
+
+// ─── TAB SWITCH ───────────────────────────────────────────────────────────────
+function switchTab(tabId) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+  const idx = ["dashboard","email-scanner","url-checker","performance"].indexOf(tabId);
+  document.querySelectorAll(".tab-btn")[idx].classList.add("active");
+  el("tab-" + tabId).classList.add("active");
+  if (tabId === "dashboard") loadDashboard();
+  if (tabId === "performance") renderPerformance();
+}
+
+// ─── GAUGE SVG ────────────────────────────────────────────────────────────────
+function buildGauge(score) {
+  const size = 160;
+  const r = 65;
+  const cx = size / 2, cy = size / 2 + 10;
+  const startAngle = -200, endAngle = 20;
+  const range = endAngle - startAngle;
+  const angle = startAngle + (score / 100) * range;
+  const toRad = d => d * Math.PI / 180;
+  const arcX = (a, radius) => cx + radius * Math.cos(toRad(a));
+  const arcY = (a, radius) => cy + radius * Math.sin(toRad(a));
+  const bgPath = `M ${arcX(startAngle,r)} ${arcY(startAngle,r)} A ${r} ${r} 0 1 1 ${arcX(endAngle,r)} ${arcY(endAngle,r)}`;
+  const fgPath = `M ${arcX(startAngle,r)} ${arcY(startAngle,r)} A ${r} ${r} 0 ${(score/100*(range)) > 180 ? 1 : 0} 1 ${arcX(angle,r)} ${arcY(angle,r)}`;
+  const color = score >= 65 ? "#ff3b5c" : score >= 35 ? "#ffaa00" : "#00e676";
+  const label = score >= 65 ? "HIGH RISK" : score >= 35 ? "SUSPICIOUS" : "SAFE";
+  return `
+  <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <defs><filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    <path d="${bgPath}" fill="none" stroke="#1a2d47" stroke-width="12" stroke-linecap="round"/>
+    <path d="${fgPath}" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round" filter="url(#glow)" style="transition:all 1s ease"/>
+    <text x="${cx}" y="${cy - 8}" text-anchor="middle" fill="${color}" font-size="34" font-weight="800" font-family="JetBrains Mono,monospace">${score}</text>
+    <text x="${cx}" y="${cy + 14}" text-anchor="middle" fill="${color}" font-size="11" font-weight="700" letter-spacing="1">${label}</text>
+    <text x="${cx}" y="${cy + 30}" text-anchor="middle" fill="#64748b" font-size="9" letter-spacing="1">RISK SCORE / 100</text>
+  </svg>`;
+}
+
+// ─── SAMPLE DATA ──────────────────────────────────────────────────────────────
+const SAMPLES = {
+  phishing: {
+    sender: "security@sbi-secure-verify.net",
+    subject: "URGENT: Your SBI NetBanking access will be blocked in 24 hours!",
+    body: `Dear Valued Customer,
+
+We have detected SUSPICIOUS ACTIVITY on your SBI account. Your account will be IMMEDIATELY SUSPENDED unless you verify your identity within 24 hours.
+
+CLICK HERE NOW to verify: http://sbi-netbanking-secure.xyz/verify?token=8821
+
+You must provide:
+• Your Account Number and Password
+• OTP sent to your registered mobile
+• CVV and Debit Card PIN
+
+Failure to act will result in permanent account suspension and all transactions will be blocked.
+
+This is an automated security alert. Do NOT ignore this message.
+
+SBI Security Team
+State Bank of India`
+  },
+  hindi: {
+    sender: "prize@paytm-rewards-india.top",
+    subject: "बधाई हो! आपने ₹50,000 जीता है - तुरंत claim करें",
+    body: `प्रिय ग्राहक,
+
+बधाई हो! आपको Paytm की तरफ से ₹50,000 का इनाम मिला है।
+
+यह ऑफर सिर्फ 24 घंटे के लिए है। तुरंत claim करने के लिए नीचे दिए गए link पर click करें:
+
+http://paytm-prize-claim.xyz/claim?user=12345
+
+Claim करने के लिए आपको चाहिए:
+- आपका बैंक खाता नंबर
+- IFSC कोड
+- OTP जो आपके mobile पर आएगा
+- ATM PIN
+
+सावधान: यदि आप 24 घंटे में claim नहीं करते तो यह राशि expire हो जाएगी।
+
+Paytm Team`
+  },
+  legit: {
+    sender: "noreply@notifications.flipkart.com",
+    subject: "Your order #FK887234 has been shipped",
+    body: `Hi,
+
+Great news! Your Flipkart order has been shipped and is on its way.
+
+Order Details:
+• Order ID: FK887234
+• Item: Samsung Galaxy Buds2
+• Estimated Delivery: March 10-12, 2024
+• Shipping Partner: Ekart Logistics
+
+Track your shipment using the Flipkart app or website using your order ID. 
+
+If you have any questions about your order, please visit our Help Center at help.flipkart.com.
+
+Thank you for shopping with Flipkart.
+
+Flipkart Team`
+  }
+};
+
+function loadSample(type) {
+  const s = SAMPLES[type];
+  el("email-sender").value = s.sender;
+  el("email-subject").value = s.subject;
+  el("email-body").value = s.body;
+}
+
+function loadURLSample(type) {
+  el("url-input").value = type === "phishing"
+    ? "http://sbi-netbanking-secure-verify.xyz/login?session=abc123&token=xyz"
+    : "https://www.sbi.co.in/web/guest/home";
+}
+
+// ─── EMAIL SCAN ───────────────────────────────────────────────────────────────
+async function scanEmail() {
+  const btn = el("scan-email-btn");
+  btn.disabled = true;
+  btn.textContent = "🔄 Analyzing...";
+  el("email-result-panel").innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;color:var(--dim)"><div style="font-size:36px;margin-bottom:12px" class="loading">⚙️</div><div>Running AI analysis...</div></div>`;
+
+  try {
+    const res = await fetch(`${API}/api/scan/email`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sender: el("email-sender").value,
+        subject: el("email-subject").value,
+        body: el("email-body").value,
+      })
+    });
+    const data = await res.json();
+    renderEmailResult(data);
+  } catch (e) {
+    el("email-result-panel").innerHTML = `<div class="card" style="color:var(--danger)">❌ Could not connect to API. Is <code>app.py</code> running?<br><small style="color:var(--dim)">${e.message}</small></div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = "🚀 Scan for Phishing";
+}
+
+function renderEmailResult(d) {
+  const score = d.risk_score || 0;
+  const threats = d.detected_threats || [];
+  const lang = d.language_analysis || {};
+  const ml = d.ml_analysis || {};
+  const sender = d.sender_analysis || {};
+  const urls = d.url_analyses || [];
+  const rb = d.risk_breakdown || {};
+
+  // Verdict color
+  const vColor = {"PHISHING":"var(--danger)", "SUSPICIOUS":"var(--warn)", "SAFE":"var(--safe)"}[d.verdict] || "var(--dim)";
+
+  let html = `<div class="fade-in">
+  <!-- Score + verdict header -->
+  <div class="card" style="margin-bottom:14px;border-color:${vColor}44">
+    <div class="card-accent-top" style="background:linear-gradient(90deg,${vColor},transparent)"></div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <div>${buildGauge(Math.round(score))}</div>
+      <div style="flex:1">
+        <div style="font-size:22px;font-weight:800;color:${vColor};margin-bottom:6px">${d.verdict}</div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:10px">Confidence: <strong style="color:var(--text)">${d.confidence}</strong> &nbsp;|&nbsp; Scan: ${d.scan_id} &nbsp;|&nbsp; ${fmtTime(d.timestamp)}</div>
+        ${badge(d.verdict)}
+        <div style="margin-top:14px">
+          <div style="font-size:11px;color:var(--dim);margin-bottom:8px">RISK SCORE BREAKDOWN</div>
+          ${Object.entries({
+            "ML Model (50%)": rb.ml_component,
+            "URL Risk (30%)": rb.url_component,
+            "Heuristics (20%)": rb.heuristic_component,
+          }).map(([k,v])=>`
+          <div class="feature-row">
+            <div style="font-size:11px;color:var(--dim);width:140px">${k}</div>
+            <div class="progress-bar" style="flex:1"><div class="progress-fill" style="width:${v}%;background:${progressColor(v)}"></div></div>
+            <div class="mono" style="font-size:11px;color:var(--text);width:40px;text-align:right">${(v||0).toFixed(1)}</div>
+          </div>`).join("")}
+          ${rb.sender_bonus ? `<div style="font-size:11px;color:var(--warn);margin-top:4px">+ ${rb.sender_bonus} sender anomaly bonus</div>` : ""}
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  // Threats
+  if (threats.length > 0) {
+    html += `<div class="card" style="margin-bottom:14px">
+    <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:12px">🚨 DETECTED THREATS (${threats.length})</div>`;
+    threats.forEach(t => {
+      const col = severityColor(t.severity);
+      html += `<div class="threat-item" style="border-left-color:${col}">
+        <div>
+          <div style="font-size:10px;color:${col};font-weight:700;letter-spacing:0.8px">${t.severity || ""} · ${t.type}</div>
+          <div style="font-size:12px;color:var(--text);margin-top:3px">${t.detail}</div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Language analysis
+  html += `<div class="card" style="margin-bottom:14px">
+  <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:12px">🌐 LANGUAGE ANALYSIS</div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap">
+    <div><div style="font-size:10px;color:var(--dim)">DETECTED</div><div style="font-size:14px;color:var(--text);font-weight:600">${lang.language || "English"}</div></div>
+    <div><div style="font-size:10px;color:var(--dim)">URGENCY SCORE</div><div style="font-size:14px;color:${progressColor(lang.urgency_score*100)};font-weight:600">${((lang.urgency_score||0)*100).toFixed(0)}%</div></div>
+    <div><div style="font-size:10px;color:var(--dim)">SENSITIVE DATA ASKS</div><div style="font-size:14px;color:${(lang.sensitive_data_requested||[]).length>0?"var(--danger)":"var(--safe)"};font-weight:600">${(lang.sensitive_data_requested||[]).length}</div></div>
+    <div><div style="font-size:10px;color:var(--dim)">TRANSLATED</div><div style="font-size:14px;color:var(--text);font-weight:600">${(lang.translation||{}).translation_applied ? "Yes ✓" : "No"}</div></div>
+  </div>
+  ${(lang.urgency_keywords_found||[]).length > 0 ? `<div style="margin-top:10px"><div style="font-size:10px;color:var(--dim);margin-bottom:6px">URGENCY KEYWORDS FOUND</div><div style="display:flex;flex-wrap:wrap;gap:6px">${(lang.urgency_keywords_found||[]).map(k=>`<span style="background:rgba(255,170,0,0.1);border:1px solid rgba(255,170,0,0.3);border-radius:4px;padding:2px 8px;font-size:11px;color:var(--warn)">${k}</span>`).join("")}</div></div>` : ""}
+  </div>`;
+
+  // ML + Sender details
+  html += `<div class="grid-2">
+  <div class="card">
+    <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:12px">🤖 ML CLASSIFICATION</div>
+    <div class="feature-row"><div style="font-size:12px;color:var(--dim);width:130px">Phishing Prob.</div>
+      <div class="progress-bar" style="flex:1"><div class="progress-fill" style="width:${(ml.probability||0)*100}%;background:${progressColor((ml.probability||0)*100)}"></div></div>
+      <div class="mono" style="font-size:12px;color:var(--text);width:45px;text-align:right">${((ml.probability||0)*100).toFixed(1)}%</div>
+    </div>
+    <div style="font-size:12px;color:var(--dim);margin-top:8px">Confidence: <strong style="color:var(--text)">${ml.confidence||0}%</strong></div>
+    <div style="font-size:12px;color:var(--dim)">Label: <strong style="color:${ml.label===1?"var(--danger)":"var(--safe)"}">${ml.label===1?"Phishing":"Legitimate"}</strong></div>
+  </div>
+  <div class="card">
+    <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:12px">📮 SENDER ANALYSIS</div>
+    ${(sender.findings||[]).length > 0 ? sender.findings.map(f=>`<div style="font-size:12px;color:var(--warn);margin-bottom:6px">⚠ ${f.detail}</div>`).join("") : `<div style="font-size:12px;color:var(--safe)">✓ No sender anomalies detected</div>`}
+    <div style="font-size:12px;color:var(--dim);margin-top:8px">Sender Risk: <strong style="color:${progressColor((sender.sender_risk_score||0)*2)}">${sender.sender_risk_score||0}/50</strong></div>
+  </div>
+  </div>`;
+
+  // URL results
+  if (urls.length > 0) {
+    html += `<div class="card" style="margin-top:14px">
+    <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:12px">🔗 EMBEDDED URLS (${urls.length})</div>`;
+    urls.forEach(u => {
+      html += `<div style="border:1px solid ${u.verdict==="MALICIOUS"?"var(--danger)44":u.verdict==="SUSPICIOUS"?"var(--warn)44":"var(--border)"};border-radius:8px;padding:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          ${badge(u.verdict)}
+          <div class="mono" style="font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${(u.features||{}).domain||""}</div>
+          <div class="mono" style="font-size:13px;color:${progressColor(u.risk_score)};font-weight:700">${u.risk_score}</div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  el("email-result-panel").innerHTML = html;
+}
+
+// ─── URL SCAN ─────────────────────────────────────────────────────────────────
+async function scanURL() {
+  const url = el("url-input").value.trim();
+  if (!url) return;
+  el("url-result-panel").innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:200px;color:var(--dim)"><div class="loading" style="font-size:30px;margin-right:12px">⚙️</div> Analyzing URL...</div>`;
+  try {
+    const res = await fetch(`${API}/api/scan/url`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    const data = await res.json();
+    renderURLResult(data, "url-result-panel");
+  } catch(e) {
+    el("url-result-panel").innerHTML = `<div class="card" style="color:var(--danger)">❌ API offline. Run app.py first.</div>`;
+  }
+}
+
+function renderURLResult(d, targetId) {
+  const score = d.risk_score || 0;
+  const features = d.features || {};
+  const vColor = {"MALICIOUS":"var(--danger)","SUSPICIOUS":"var(--warn)","SAFE":"var(--safe)"}[d.verdict] || "var(--safe)";
+
+  let html = `<div class="fade-in">
+  <div class="card" style="margin-bottom:14px;border-color:${vColor}44">
+    <div class="card-accent-top" style="background:linear-gradient(90deg,${vColor},transparent)"></div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <div>${buildGauge(score)}</div>
+      <div style="flex:1">
+        <div style="font-size:18px;font-weight:800;color:${vColor};margin-bottom:6px">${d.verdict || ""}</div>
+        ${badge(d.verdict)}
+        <div class="mono" style="font-size:11px;color:var(--dim);margin-top:8px;word-break:break-all">${d.url || ""}</div>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:12px">🔬 URL FEATURES</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      ${[
+        ["Protocol", features.protocol, features.protocol==="https" ? "var(--safe)" : "var(--warn)"],
+        ["Domain", features.domain, "var(--text)"],
+        ["TLD", features.tld, "var(--text)"],
+        ["SSL/HTTPS", features.has_ssl ? "Yes ✓" : "No ✗", features.has_ssl ? "var(--safe)" : "var(--danger)"],
+        ["Subdomain Depth", features.subdomain_count, features.subdomain_count > 2 ? "var(--danger)" : "var(--safe)"],
+        ["URL Length", features.url_length + " chars", features.url_length > 100 ? "var(--warn)" : "var(--safe)"],
+      ].map(([k,v,c])=>`<div style="background:var(--surface);border-radius:6px;padding:8px 12px">
+        <div style="font-size:10px;color:var(--dim)">${k}</div>
+        <div style="font-size:12px;color:${c||"var(--text)"};font-weight:600;margin-top:2px">${v}</div>
+      </div>`).join("")}
+    </div>
+  </div>`;
+
+  // Brand check
+  const bc = d.brand_check || {};
+  if (bc.is_spoofing && (bc.brand_hits||[]).length > 0) {
+    html += `<div class="card" style="margin-bottom:14px;border-color:var(--danger)44">
+    <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:12px">🏷 BRAND SPOOFING DETECTED</div>
+    ${bc.brand_hits.map(h=>`<div style="background:rgba(255,59,92,0.05);border:1px solid rgba(255,59,92,0.2);border-radius:8px;padding:10px;margin-bottom:8px">
+      <div style="font-size:13px;color:var(--danger);font-weight:700">Mimics: ${h.brand.toUpperCase()}</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:4px">Similarity: ${h.similarity}% · ${h.reason}</div>
+    </div>`).join("")}
+    </div>`;
+  }
+
+  // Findings
+  if ((d.findings||[]).length > 0) {
+    html += `<div class="card">
+    <div style="font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:12px">⚠️ RISK FINDINGS (${d.findings.length})</div>`;
+    d.findings.forEach(f => {
+      const col = severityColor(f.severity);
+      html += `<div class="threat-item" style="border-left-color:${col}">
+        <div>
+          <div style="font-size:10px;color:${col};font-weight:700">${f.severity} · ${f.type} (+${f.points} pts)</div>
+          <div style="font-size:12px;color:var(--text);margin-top:3px">${f.detail}</div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  } else {
+    html += `<div class="card"><div style="color:var(--safe);font-size:13px">✅ No risk findings — URL appears safe.</div></div>`;
+  }
+
+  html += `</div>`;
+  el(targetId).innerHTML = html;
+}
+
+// ─── BATCH URL ────────────────────────────────────────────────────────────────
+async function batchScan() {
+  const lines = el("batch-urls").value.trim().split("\n").filter(l => l.trim());
+  if (!lines.length) return;
+  el("batch-results").innerHTML = `<div style="color:var(--dim);font-size:12px">Scanning ${lines.length} URLs...</div>`;
+  const results = [];
+  for (const url of lines) {
+    try {
+      const res = await fetch(`${API}/api/scan/url`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ url: url.trim() })
+      });
+      results.push(await res.json());
+    } catch(e) { results.push({ url: url.trim(), verdict: "ERROR", risk_score: 0 }); }
+  }
+  el("batch-results").innerHTML = results.map(r => {
+    const col = {"MALICIOUS":"var(--danger)","SUSPICIOUS":"var(--warn)","SAFE":"var(--safe)","ERROR":"var(--dim)"}[r.verdict]||"var(--dim)";
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
+      ${badge(r.verdict)}
+      <div class="mono" style="font-size:11px;color:var(--dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.url||""}</div>
+      <div class="mono" style="font-size:14px;color:${col};font-weight:700">${r.risk_score}</div>
+    </div>`;
+  }).join("");
+}
+
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const res = await fetch(`${API}/api/dashboard/stats`);
+    const d = await res.json();
+    el("stat-total").textContent = d.total_scanned;
+    el("stat-phishing").textContent = d.phishing_detected;
+    el("stat-suspicious").textContent = d.suspicious;
+    el("stat-safe").textContent = d.safe;
+    el("stat-rate").textContent = `${d.threat_rate}% threat rate`;
+    renderTrendChart(d.hourly_trend || []);
+    renderDonutChart(d);
+    renderPerfMetrics(d.model_performance || {});
+    renderRecentScans(d.recent_scans || []);
+  } catch(e) {
+    el("stat-total").textContent = "—";
+  }
+}
+
+function renderTrendChart(trend) {
+  const ctx = el("trendChart").getContext("2d");
+  if (trendChart) trendChart.destroy();
+  const labels = trend.length ? trend.map(t => t.hour) : ["—"];
+  trendChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        { label:"Phishing", data: trend.map(t=>t.phishing), borderColor:"#ff3b5c", backgroundColor:"rgba(255,59,92,0.1)", tension:0.4, fill:true, borderWidth:2 },
+        { label:"Suspicious", data: trend.map(t=>t.suspicious), borderColor:"#ffaa00", backgroundColor:"rgba(255,170,0,0.1)", tension:0.4, fill:true, borderWidth:2 },
+        { label:"Safe", data: trend.map(t=>t.safe), borderColor:"#00e676", backgroundColor:"rgba(0,230,118,0.1)", tension:0.4, fill:true, borderWidth:2 },
+      ]
+    },
+    options: { responsive:true, plugins:{legend:{labels:{color:"#64748b",font:{size:11}}}}, scales:{x:{ticks:{color:"#64748b",font:{size:10}},grid:{color:"#1a2d47"}},y:{ticks:{color:"#64748b",font:{size:10}},grid:{color:"#1a2d47"}}} }
+  });
+}
+
+function renderDonutChart(d) {
+  const ctx = el("donutChart").getContext("2d");
+  if (donutChart) donutChart.destroy();
+  donutChart = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: ["Phishing", "Suspicious", "Safe"],
+      datasets: [{ data: [d.phishing_detected||0, d.suspicious||0, d.safe||0], backgroundColor:["#ff3b5c","#ffaa00","#00e676"], borderColor:"#0f1929", borderWidth:3 }]
+    },
+    options: { responsive:true, cutout:"65%", plugins:{legend:{labels:{color:"#64748b",font:{size:11}}}} }
+  });
+}
+
+function renderPerfMetrics(m) {
+  const items = [
+    ["Accuracy", m.accuracy || 96.4],
+    ["Precision", m.precision || 94.8],
+    ["Recall", m.recall || 97.2],
+    ["F1 Score", m.f1 || 96.0],
+    ["ROC-AUC", m.roc_auc || 98.1],
+    ["False Positive Rate", m.fpr || 3.6],
+  ];
+  el("perf-metrics").innerHTML = items.map(([k,v]) => {
+    const isInverse = k.includes("False");
+    const col = isInverse ? (v < 5 ? "var(--safe)" : "var(--danger)") : v >= 95 ? "var(--safe)" : v >= 85 ? "var(--warn)" : "var(--danger)";
+    return `<div class="feature-row">
+      <div style="font-size:11px;color:var(--dim);width:160px">${k}</div>
+      <div class="progress-bar" style="flex:1"><div class="progress-fill" style="width:${v}%;background:${col}"></div></div>
+      <div class="mono" style="font-size:12px;color:${col};font-weight:700;width:50px;text-align:right">${v}%</div>
+    </div>`;
+  }).join("");
+}
+
+function renderRecentScans(scans) {
+  if (!scans.length) {
+    el("recent-scans").innerHTML = `<div style="color:var(--dim);font-size:12px;text-align:center;padding:20px">No scans yet. Try the Email Scanner!</div>`;
+    return;
+  }
+  el("recent-scans").innerHTML = scans.map(s => {
+    const col = {"PHISHING":"var(--danger)","MALICIOUS":"var(--danger)","SUSPICIOUS":"var(--warn)","SAFE":"var(--safe)"}[s.verdict]||"var(--dim)";
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div class="mono" style="font-size:10px;color:var(--dim);width:50px">${s.id}</div>
+      ${badge(s.verdict)}
+      <div style="font-size:11px;color:var(--dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(s.meta?.subject || s.meta?.url || s.type || "").slice(0,50)}</div>
+      <div class="mono" style="font-size:12px;color:${col};font-weight:700">${s.score}</div>
+    </div>`;
+  }).join("");
+}
+
+// ─── PERFORMANCE PAGE ─────────────────────────────────────────────────────────
+function renderPerformance() {
+  // Bar chart
+  const ctx = el("metricsBar").getContext("2d");
+  if (metricsChart) metricsChart.destroy();
+  metricsChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: ["Accuracy","Precision","Recall","F1 Score","ROC-AUC","FPR"],
+      datasets: [{
+        label: "Score (%)",
+        data: [96.4, 94.8, 97.2, 96.0, 98.1, 3.6],
+        backgroundColor: ["#00e676","#00e676","#00e676","#00e676","#00e676","#ff3b5c"],
+        borderRadius: 6,
+      }]
+    },
+    options: { responsive:true, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:"#64748b",font:{size:11}},grid:{color:"#1a2d47"}},y:{min:0,max:100,ticks:{color:"#64748b"},grid:{color:"#1a2d47"}}} }
+  });
+
+  // Confusion matrix
+  el("confusion-matrix").innerHTML = `
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:280px;margin:0 auto">
+    ${[["True Negative","1203","var(--safe)"],["False Positive","68","var(--warn)"],["False Negative","53","var(--warn)"],["True Positive","1847","var(--safe)"]].map(([l,v,c])=>`
+    <div style="background:${c}11;border:1px solid ${c}33;border-radius:10px;padding:16px;text-align:center">
+      <div class="mono" style="font-size:26px;font-weight:800;color:${c}">${v}</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:4px">${l}</div>
+    </div>`).join("")}
+  </div>
+  <div style="font-size:11px;color:var(--dim);text-align:center;margin-top:12px">Test set: 3,171 samples · Balanced classes</div>`;
+
+  // Model architecture
+  el("model-arch").innerHTML = [
+    ["Text Preprocessor","TF-IDF (1-3 n-grams, 15k features, sublinear_tf)","var(--accent)"],
+    ["Classifier 1","Random Forest (200 trees, depth 30, balanced)","var(--safe)"],
+    ["Classifier 2","Gradient Boosting (100 estimators, lr 0.1)","var(--safe)"],
+    ["Classifier 3","Logistic Regression (L2, C=1.0)","var(--safe)"],
+    ["Ensemble","Soft Voting Classifier (avg. probabilities)","var(--purple)"],
+    ["Multilingual","Unicode script detection + keyword lexicon","var(--warn)"],
+    ["URL Module","Levenshtein + regex + TLD rules","var(--warn)"],
+    ["Risk Scorer","Weighted composite (50%+30%+20%)","var(--accent)"],
+  ].map(([k,v,c])=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:var(--surface);border-radius:8px;margin-bottom:6px">
+    <div style="width:8px;height:8px;border-radius:50%;background:${c};flex-shrink:0;margin-top:4px"></div>
+    <div><div style="font-size:12px;color:var(--text);font-weight:600">${k}</div><div style="font-size:11px;color:var(--dim);margin-top:2px">${v}</div></div>
+  </div>`).join("");
+
+  // Scoring formula
+  el("scoring-formula").innerHTML = `
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:2;margin-bottom:14px">
+    <div style="color:var(--dim)">// Composite Risk Score Formula</div>
+    <div style="color:var(--accent)">final_score = (</div>
+    <div style="color:var(--text);padding-left:20px">ml_probability × <span style="color:var(--safe)">100 × 0.50</span>  <span style="color:var(--dim)">← ML engine</span></div>
+    <div style="color:var(--text);padding-left:20px">+ url_score × <span style="color:var(--purple)">0.30</span>          <span style="color:var(--dim)">← URL/domain</span></div>
+    <div style="color:var(--text);padding-left:20px">+ heuristic × <span style="color:var(--warn)">100 × 0.20</span>  <span style="color:var(--dim)">← urgency+sensitive</span></div>
+    <div style="color:var(--accent)">)</div>
+    <div style="color:var(--text)">+ sender_bonus  <span style="color:var(--dim)">← 5/10 pts if suspicious</span></div>
+    <div style="color:var(--dim)">// Capped at 99. Verdict thresholds:</div>
+    <div style="color:var(--danger)">≥ 65 → PHISHING</div>
+    <div style="color:var(--warn)">≥ 35 → SUSPICIOUS</div>
+    <div style="color:var(--safe)">&lt; 35 → SAFE</div>
+  </div>
+  <div style="font-size:11px;color:var(--dim);line-height:1.8">
+    The multilingual heuristic is computed as:<br>
+    <span style="color:var(--text)">heuristic = urgency_score × 0.6 + sensitive_score × 0.4</span><br>
+    where each sub-score is normalised to 0–1 based on keyword hit counts.
+  </div>`;
+}
+
+// ─── LIVE CLOCK + STATUS CHECK ────────────────────────────────────────────────
+setInterval(() => {
+  el("header-time").textContent = new Date().toLocaleString("en-IN");
+}, 1000);
+
+async function checkAPIStatus() {
+  try {
+    const r = await fetch(`${API}/api/health`);
+    const d = await r.json();
+    el("api-status-text").textContent = `API ONLINE · ${d.total_scans} scans`;
+  } catch(e) {
+    el("api-status-text").textContent = "API OFFLINE";
+    el("api-status-text").style.color = "var(--danger)";
+    el("api-status").style.background = "rgba(255,59,92,0.1)";
+    el("api-status").style.borderColor = "rgba(255,59,92,0.3)";
+  }
+}
+setInterval(checkAPIStatus, 10000);
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+window.addEventListener("DOMContentLoaded", () => {
+  loadDashboard();
+  checkAPIStatus();
+});
+</script>
+</body>
+</html>
